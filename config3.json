@@ -1,0 +1,43 @@
+{
+    "model_architecture": "pretrained_unet_inceptionv3",
+	"train_images_path": "../data6/train_images",
+    "train_masks_path": "../data6/train_masks",
+    "val_images_path": "../data6/val_images",
+    "val_masks_path": "../data6/val_masks",
+	"test_images_path": "../data6/test_images",
+	"test_masks_path": "../data6/test_masks",
+	"test_large_images_path": "../data2/images/*png",
+	"train_large_images_path": "../data2/images/",
+	"loss": "bce_dice_loss",
+	"learning_rate": 0.0001,
+	"patch_size": [256, 256],
+    "img_data_gen_args": {
+        "rotation_range": 90,
+        "width_shift_range": 0.3,
+        "height_shift_range": 0.3,
+        "shear_range": 0.5,
+        "zoom_range": 0.3,
+        "horizontal_flip": true,
+        "vertical_flip": true,
+        "fill_mode": "reflect"
+    },
+    "mask_data_gen_args": {
+        "rotation_range": 90,
+        "width_shift_range": 0.3,
+        "height_shift_range": 0.3,
+        "shear_range": 0.5,
+        "zoom_range": 0.3,
+        "horizontal_flip": true,
+        "vertical_flip": true,
+        "fill_mode": "reflect"
+    },
+    "num_epochs": 100,
+    "batch_size": 16,
+    "steps_per_epoch": 100,
+    "validation_steps": 100,
+	"output_directory": "{loss}/{model_architecture}/{model_architecture}_{num_epochs}epochs_bs{batch_size}_lr_{learning_rate}",
+    "checkpoint_path": "{output_directory}/checkpoints",
+    "loss_plot_filename": "loss.png",
+    "iou_plot_filename": "iou_score.png",
+    "weights_filename": "weights.hdf5"
+}
