@@ -1,61 +1,48 @@
-def train_model(model, train_data_generator, val_data_generator, train_total_steps, val_total_steps, config, initial_epoch=1):
-    num_epochs = config["num_epochs"]
-    batch_size = config["batch_size"]
-    output_directory = config["output_directory"].format(**config)
+from __future__ import print_function, unicode_literals, absolute_import, division
+import tensorflow as tf
+import json
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from other_utils import load_config, setup_train_model, create_train_data_generators, train_model, create_plot, plot_and_save_loss_iou
+import os
+import pandas as pd    
 
-    # Create an empty dictionary to store the training history
-    training_history = {'loss': [], 'accuracy': [], 'iou_score': [], 'f1_score': [], 'f2_score': [],
-                        'recall': [], 'precision': [], 'val_loss': [], 'val_accuracy': [],
-                        'val_iou_score': [], 'val_f1_score': [], 'val_f2_score': [],
-                        'val_recall': [], 'val_precision': []}
+strategy = tf.distribute.MirroredStrategy()
+n_gpus = strategy.num_replicas_in_sync
+print('Number of devices: %d' % n_gpus)
 
-    # Define a ModelCheckpoint callback to save the model weights and training history
-    class CustomModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
-        def on_epoch_end(self, epoch, logs=None):
-            # Save the training history
-            for key, value in logs.items():
-                if key in training_history:
-                    training_history[key].append(value)
-            # Call the parent on_epoch_end method to save the model weights
-            super().on_epoch_end(epoch, logs)
 
-    # Define a CustomModelCheckpoint callback to save both model weights and training history
-    checkpoint_callback = CustomModelCheckpoint(
-        filepath=output_directory + "/weights-{epoch:02d}-{val_iou_score:.2f}.hdf5",
-        monitor='val_iou_score',
-        mode='max',
-        save_best_only=True,
-        save_weights_only=False,
-        verbose=1,
-        period=10  # Save every 100 epochs
-    )
+# Load configuration from JSON
+config = load_config('config3.json')
+model_architecture = config["model_architecture"]
+loss_plot_filename = config["loss_plot_filename"].format(**config)
+iou_plot_filename = config["iou_plot_filename"].format(**config)
+weights_filename = config["weights_filename"].format(**config)
 
-    # Define an EarlyStopping callback to stop training if validation loss stops improving
-    early_stopping_callback = tf.keras.callbacks.EarlyStopping(
-        monitor='val_iou_score',
-        mode='max',
-        patience=20,  # Number of epochs with no improvement after which training will be stopped
-        verbose=1,
-        restore_best_weights=True
-    )
+# Unpack configuration variables
+model, preprocess_input, optimizer, loss, output_directory = setup_train_model(strategy, config)
 
-    # Fit the model
-    history = model.fit(
-        train_data_generator,
-        validation_data=val_data_generator,
-        steps_per_epoch=train_total_steps,
-        validation_steps=val_total_steps,
-        epochs=num_epochs,
-        batch_size=batch_size,
-        callbacks=[checkpoint_callback, early_stopping_callback],
-        initial_epoch=initial_epoch
-    )
+# Create the directory for this configuration
+if not os.path.exists(output_directory):
+    os.makedirs(output_directory)
 
-    # Save the model weights at the end of training
-    model.save_weights(f"{output_directory}/final_weights.hdf5")
+# Data Generators
+train_data_generator, val_data_generator, train_total_steps, val_total_steps = create_train_data_generators(strategy, config, preprocess_input, n_gpus)
 
-    # Save the training history to a CSV file
-    history_csv_path = f"{output_directory}/training_history.csv"
-    pd.DataFrame(training_history).to_csv(history_csv_path, index=False)
 
-    return history, model
+# Evaluate the model using the custom progress tracker
+history, model = train_model(model, train_data_generator, val_data_generator, train_total_steps, val_total_steps, config)
+
+# Save the model weights
+model.save_weights(f"{output_directory}/{weights_filename}")
+
+# Call the plot_and_save_loss_iou function from utils to plot and save loss and IOU
+plot_and_save_loss_iou(
+    history.history['loss'],
+    history.history['val_loss'],
+    f"{output_directory}/{loss_plot_filename}",
+    history.history['iou_score'],
+    history.history['val_iou_score'],
+    f"{output_directory}/{iou_plot_filename}")
+    
+
+print(f"Training {model_architecture} is done.")
